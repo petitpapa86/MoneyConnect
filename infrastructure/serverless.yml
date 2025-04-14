@@ -1,0 +1,264 @@
+service: money-transfer-service
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: ${opt:stage, 'dev'}
+  region: us-east-1
+  environment:
+    NODE_ENV: ${opt:stage, 'dev'}
+    USERS_TABLE: UsersTable
+  
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource:
+            - !GetAtt UsersTable.Arn
+            - !GetAtt TransactionsTable.Arn
+            - !GetAtt RecipientsTable.Arn
+            - !GetAtt KYCDocumentsTable.Arn
+        - Effect: Allow
+          Action:
+            - s3:GetObject
+            - s3:PutObject
+          Resource: !Sub "${KYCDocumentsBucket.Arn}/*"
+
+functions:
+  # Auth functions
+  userRegister:
+    handler: backend/auth/register.handler
+    events:
+      - http:
+          path: /auth/register
+          method: post
+          cors: true
+  
+  userLogin:
+    handler: backend/auth/login.handler
+    events:
+      - http:
+          path: /auth/login
+          method: post
+          cors: true
+  
+  # User profile functions
+  getUserProfile:
+    handler: backend/users/getProfile.handler
+    events:
+      - http:
+          path: /users/profile
+          method: get
+          cors: true
+          authorizer: aws_iam
+  
+  updateUserProfile:
+    handler: backend/users/updateProfile.handler
+    events:
+      - http:
+          path: /users/profile
+          method: put
+          cors: true
+          authorizer: aws_iam
+  
+  # KYC functions
+  uploadKYCDocument:
+    handler: backend/kyc/uploadDocument.handler
+    events:
+      - http:
+          path: /kyc/documents
+          method: post
+          cors: true
+          authorizer: aws_iam
+  
+  # Recipients functions
+  createRecipient:
+    handler: backend/recipients/createRecipient.handler
+    events:
+      - http:
+          path: /recipients
+          method: post
+          cors: true
+          authorizer: aws_iam
+  
+  listRecipients:
+    handler: backend/recipients/listRecipients.handler
+    events:
+      - http:
+          path: /recipients
+          method: get
+          cors: true
+          authorizer: aws_iam
+  
+  # Transfer functions
+  initiateTransfer:
+    handler: backend/transfers/initiateTransfer.handler
+    events:
+      - http:
+          path: /transfers
+          method: post
+          cors: true
+          authorizer: aws_iam
+  
+  getTransferStatus:
+    handler: backend/transfers/getStatus.handler
+    events:
+      - http:
+          path: /transfers/{transferId}
+          method: get
+          cors: true
+          authorizer: aws_iam
+  
+  listTransfers:
+    handler: backend/transfers/listTransfers.handler
+    events:
+      - http:
+          path: /transfers
+          method: get
+          cors: true
+          authorizer: aws_iam
+
+resources:
+  Resources:
+    # DynamoDB Tables
+    UsersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-users-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: userId
+            AttributeType: S
+          - AttributeName: email
+            AttributeType: S
+        KeySchema:
+          - AttributeName: userId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: email-index
+            KeySchema:
+              - AttributeName: email
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+
+    TransactionsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-transactions-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: transactionId
+            AttributeType: S
+          - AttributeName: userId
+            AttributeType: S
+          - AttributeName: status
+            AttributeType: S
+          - AttributeName: createdAt
+            AttributeType: S
+        KeySchema:
+          - AttributeName: transactionId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: userId-index
+            KeySchema:
+              - AttributeName: userId
+                KeyType: HASH
+              - AttributeName: createdAt
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+          - IndexName: status-createdAt-index
+            KeySchema:
+              - AttributeName: status
+                KeyType: HASH
+              - AttributeName: createdAt
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+
+    RecipientsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-recipients-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: recipientId
+            AttributeType: S
+          - AttributeName: userId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: recipientId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: userId-index
+            KeySchema:
+              - AttributeName: userId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+
+    KYCDocumentsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-kyc-documents-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: documentId
+            AttributeType: S
+          - AttributeName: userId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: documentId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: userId-index
+            KeySchema:
+              - AttributeName: userId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+
+    # S3 Buckets
+    KYCDocumentsBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:service}-kyc-documents-${self:provider.stage}
+        AccessControl: Private
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        BucketEncryption:
+          ServerSideEncryptionConfiguration:
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: AES256
+
+    TransactionReceiptsBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:service}-receipts-${self:provider.stage}
+        AccessControl: Private
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        BucketEncryption:
+          ServerSideEncryptionConfiguration:
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: AES256
+
+plugins:
+  - serverless-offline
+  - serverless-iam-roles-per-function

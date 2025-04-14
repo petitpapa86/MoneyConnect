@@ -1,14 +1,29 @@
 {
-  "name": "moneyconnect",
-  "version": "1.0.0",
-  "description": "",
-  "main": "server.js",
+  "name": "money-transfer-service-backend",
+  "version": "0.1.0",
+  "description": "Serverless backend for immigrant money transfer service",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "lint": "eslint .",
+    "test": "jest",
+    "dev": "serverless offline",
+    "deploy:dev": "serverless deploy --stage dev",
+    "deploy:prod": "serverless deploy --stage prod"
   },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/petitpapa86/MoneyConnect.git"
+  "dependencies": {
+    "aws-sdk": "^2.1441.0",
+    "uuid": "^9.0.0",
+    "joi": "^17.9.2",
+    "jsonwebtoken": "^9.0.1",
+    "bcryptjs": "^2.4.3",
+    "axios": "^1.4.0"
   },
-  "private": true
+  "devDependencies": {
+    "eslint": "^8.47.0",
+    "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-plugin-import": "^2.28.0",
+    "jest": "^29.6.2",
+    "serverless": "^3.33.0",
+    "serverless-offline": "^12.0.4",
+    "serverless-iam-roles-per-function": "^3.2.0"
+  }
 }
