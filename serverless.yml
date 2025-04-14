@@ -4,12 +4,13 @@ frameworkVersion: '3'
 
 provider:
   name: aws
-  runtime: nodejs18.x
+  runtime: nodejs22.x
   stage: ${opt:stage, 'dev'}
   region: us-east-1
   environment:
     NODE_ENV: ${opt:stage, 'dev'}
     USERS_TABLE: UsersTable
+    RESOURCE_GROUP_ARN: arn:aws:resource-groups:us-east-1:495599763526:group/money-connect/03dfem1v25ux87j7kcxt8cv4in
   
   iam:
     role:
@@ -31,7 +32,14 @@ provider:
           Action:
             - s3:GetObject
             - s3:PutObject
-          Resource: !Sub "${KYCDocumentsBucket.Arn}/*"
+          Resource:
+            - !Sub "${KYCDocumentsBucket.Arn}/*"
+            - !Sub "${TransactionReceiptsBucket.Arn}/*"
+        - Effect: Allow
+          Action:
+            - resource-groups:*
+          Resource:
+            - arn:aws:resource-groups:us-east-1:495599763526:group/money-connect/03dfem1v25ux87j7kcxt8cv4in
 
 functions:
   # Auth functions
@@ -258,6 +266,11 @@ resources:
           ServerSideEncryptionConfiguration:
             - ServerSideEncryptionByDefault:
                 SSEAlgorithm: AES256
+
+    MyCustomResource:
+      Type: AWS::SomeService::SomeResource
+      Properties:
+        ResourceGroupArn: arn:aws:resource-groups:us-east-1:495599763526:group/money-connect/03dfem1v25ux87j7kcxt8cv4in
 
 plugins:
   - serverless-offline
